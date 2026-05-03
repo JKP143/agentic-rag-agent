@@ -2,7 +2,7 @@
 
 > Drop a file in a watched Google Drive folder. Ask Telegram a question about it. The agent picks the right retrieval tool — semantic search, full-document fetch, or a SQL query against your tabular data — and answers, with citations.
 
-![placeholder — drop a screenshot of a chat session in docs/screenshots/ and link it here](docs/screenshots/.gitkeep)
+![Agentic RAG Agent — n8n workflow canvas](docs/screenshots/workflow-full.png)
 
 ## What it does
 
@@ -133,6 +133,19 @@ Optional — only for the helper scripts in `tools/`. Copy `.env.example` to `.e
 - `tools/verify_rag_workflow.py` — semantic checks (4 tools wired, 5 switch branches, both Drive triggers reach Loop Over Items, etc.).
 - `tools/fetch_execution.py` — pull a single run's data (essential for debugging tool calls).
 - `tools/list_executions.py` — recent runs.
+
+## Screenshots
+
+Per-branch detail views of the canvas:
+
+![Chat branch — Telegram → Gemini agent → 4 RAG tools](docs/screenshots/chat-branch-agentic-rag.png)
+*Chat branch: Telegram → RAG AI Agent (Gemini) wired to four tools (rag_search with Cohere reranker, list_documents, get_file_contents, query_document_rows) plus Postgres chat memory and ElevenLabs voice replies.*
+
+![Ingest branch — Drive triggers fan out to vector + tabular paths](docs/screenshots/ingest-branch-create-update.png)
+*Ingest branch: Drive triggers (file created / updated) → loop → dedup deletes → mime switch → tabular path (rows + schema) and unstructured path (chunk + embed → pgvector).*
+
+![Cleanup branch — 15-minute trashed-file polling](docs/screenshots/cleanup-branch-trashed-file-polling.png)
+*Cleanup branch: schedule fires every 15 minutes, queries Drive for trashed files, deletes their vectors / rows / metadata from Neon.*
 
 ## See also
 
