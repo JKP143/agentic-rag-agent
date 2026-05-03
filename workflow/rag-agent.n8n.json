@@ -1,0 +1,2028 @@
+{
+  "name": "RAG AI Agent Improvement in Project# 2&3",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## \ud83d\udcac Chat Branch \u2014 Agentic RAG\n\nTelegram \u2192 AI Agent \u2192 formatter \u2192 Telegram.\n\nAgent picks between four tools based on question type:\n- **rag_search** \u2014 semantic chunk search (facts)\n- **list_documents** \u2014 what's available + schema\n- **get_file_contents** \u2014 full-document text (summaries)\n- **query_document_rows** \u2014 SELECT SQL on tabular data (math)",
+        "height": 796,
+        "width": 1400,
+        "color": 4
+      },
+      "id": "sticky-rag-chat",
+      "name": "Chat Branch Sticky",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1568,
+        -336
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### \ud83d\udee0\ufe0f Agent Tools\nWired to the RAG AI Agent via `ai_tool`. The bottom row below `rag_search` is the Gemini embeddings subnode used for query-time embedding.",
+        "height": 332,
+        "width": 768,
+        "color": 3
+      },
+      "id": "sticky-rag-tools",
+      "name": "Agent Tools Sticky",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1136,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## \ud83d\udce5 Ingest Branch \u2014 Create / Update\n\nDrive trigger \u2192 Loop \u2192 Set File ID \u2192 delete old vectors & rows \u2192 upsert metadata \u2192 Download \u2192 Switch on mime type.\n\n**Tabular path (Excel / CSV):** rows -> `document_rows` (jsonb); headers -> `schema` column on `document_metadata`.\n**Unstructured path (PDF / Docs / text):** Default Data Loader + Recursive Splitter -> Gemini embeddings -> `documents` (Postgres pgvector).\n\nTabular files are ALSO vectorized (Summarize -> Vector Store Insert) so `rag_search` can find them by semantic match.\n\nLoop's 'done' output fires the Telegram ingest notification.",
+        "height": 988,
+        "width": 3036,
+        "color": 5
+      },
+      "id": "sticky-rag-ingest",
+      "name": "Ingest Branch Sticky",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1936,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## \ud83d\uddd1\ufe0f Cleanup Branch \u2014 Trashed-File Polling\n\nDrive has no native 'File Deleted' trigger, so we poll `files.list?q=trashed=true` every 15 minutes, confirm the file_id exists in `document_metadata`, then delete from all three Neon Postgres tables (documents / document_rows / document_metadata).",
+        "height": 232,
+        "width": 1820,
+        "color": 6
+      },
+      "id": "sticky-rag-cleanup",
+      "name": "Cleanup Branch Sticky",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1776,
+        1568
+      ]
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_ME_GOOGLE_RESOURCE_ID"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "id": "c0000000-0001-4000-8000-000000000001",
+      "name": "File Created",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1856,
+        688
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REPLACE_ME_GOOGLEDRIVEOAUTH2API_CREDENTIAL_ID",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_ME_GOOGLE_RESOURCE_ID"
+        },
+        "event": "fileUpdated",
+        "options": {}
+      },
+      "id": "c0000000-0001-4000-8000-000000000002",
+      "name": "File Updated",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1856,
+        880
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REPLACE_ME_GOOGLEDRIVEOAUTH2API_CREDENTIAL_ID",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      },
+      "id": "c0000000-0001-4000-8000-000000000003",
+      "name": "Loop Over Items",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1664,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "s1",
+              "name": "file_id",
+              "type": "string",
+              "value": "={{ $json.id }}"
+            },
+            {
+              "id": "s2",
+              "name": "file_type",
+              "type": "string",
+              "value": "={{ $json.mimeType }}"
+            },
+            {
+              "id": "s3",
+              "name": "file_title",
+              "type": "string",
+              "value": "={{ $json.name }}"
+            },
+            {
+              "id": "s4",
+              "name": "file_url",
+              "type": "string",
+              "value": "={{ $json.webViewLink }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c0000000-0001-4000-8000-000000000004",
+      "name": "Set File ID",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1456,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DO $$\nBEGIN\n    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'documents') THEN\n        EXECUTE 'DELETE FROM documents WHERE metadata->>''file_id'' LIKE ''%' || $1 || '%''';\n    END IF;\nEND\n$$;",
+        "options": {
+          "queryReplacement": "={{ $json.file_id }}"
+        }
+      },
+      "id": "c0000000-0001-4000-8000-000000000005",
+      "name": "Delete Old Vector Chunks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -1264,
+        784
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_POSTGRES_CREDENTIAL_ID",
+          "name": "NeonDB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM document_rows\nWHERE dataset_id LIKE '%' || $1 || '%';",
+        "options": {
+          "queryReplacement": "={{ $('Set File ID').item.json.file_id }}"
+        }
+      },
+      "id": "c0000000-0001-4000-8000-000000000006",
+      "name": "Delete Old Doc Rows",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -1056,
+        784
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_POSTGRES_CREDENTIAL_ID",
+          "name": "NeonDB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "document_metadata",
+          "cachedResultName": "document_metadata"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "value": {
+            "id": "={{ $('Set File ID').item.json.file_id }}",
+            "title": "={{ $('Set File ID').item.json.file_title }}",
+            "url": "={{ $('Set File ID').item.json.file_url }}",
+            "mime_type": "={{ $('Set File ID').item.json.file_type }}",
+            "created_at": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "type": "string",
+              "required": true,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "defaultMatch": true
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "type": "string",
+              "display": true
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "type": "string",
+              "display": true
+            },
+            {
+              "id": "mime_type",
+              "displayName": "mime_type",
+              "type": "string",
+              "display": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "type": "dateTime",
+              "display": true
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "type": "dateTime",
+              "display": true,
+              "removed": true
+            },
+            {
+              "id": "schema",
+              "displayName": "schema",
+              "type": "string",
+              "display": true,
+              "removed": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c0000000-0001-4000-8000-000000000007",
+      "name": "Insert Document Metadata",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -864,
+        784
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_POSTGRES_CREDENTIAL_ID",
+          "name": "NeonDB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Set File ID').item.json.file_id }}"
+        },
+        "options": {
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "text/plain"
+            }
+          }
+        }
+      },
+      "id": "c0000000-0001-4000-8000-000000000008",
+      "name": "Download File",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -656,
+        784
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REPLACE_ME_GOOGLEDRIVEOAUTH2API_CREDENTIAL_ID",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "leftValue": "",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "r1",
+                    "leftValue": "={{ $('Set File ID').item.json.file_type }}",
+                    "rightValue": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "xlsx"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "leftValue": "",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "r2",
+                    "leftValue": "={{ $('Set File ID').item.json.file_type }}",
+                    "rightValue": "application/vnd.google-apps.spreadsheet",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "gsheet"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "leftValue": "",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "r3",
+                    "leftValue": "={{ $('Set File ID').item.json.file_type }}",
+                    "rightValue": "application/pdf",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "pdf"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "leftValue": "",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "r4",
+                    "leftValue": "={{ $('Set File ID').item.json.file_type }}",
+                    "rightValue": "application/vnd.google-apps.document",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "gdoc"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "other"
+        }
+      },
+      "id": "c0000000-0001-4000-8000-000000000009",
+      "name": "Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -464,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "options": {}
+      },
+      "id": "c0000000-0001-4000-8000-00000000000a",
+      "name": "Extract from Excel",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -240,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "c0000000-0001-4000-8000-00000000000b",
+      "name": "Extract from CSV",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -240,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "id": "c0000000-0001-4000-8000-00000000000c",
+      "name": "Extract PDF Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -240,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "options": {}
+      },
+      "id": "c0000000-0001-4000-8000-00000000000d",
+      "name": "Extract Document Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -240,
+        1152
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "document_rows",
+          "cachedResultName": "document_rows"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "dataset_id": "={{ $('Set File ID').item.json.file_id }}",
+            "row_data": "={{ $json.toJsonString().replaceAll(/'/g, \"''\") }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "type": "number",
+              "display": true,
+              "removed": true
+            },
+            {
+              "id": "dataset_id",
+              "displayName": "dataset_id",
+              "type": "string",
+              "display": true,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_data",
+              "displayName": "row_data",
+              "type": "object",
+              "display": true,
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "c0000000-0001-4000-8000-00000000000e",
+      "name": "Insert Table Rows",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        32,
+        784
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_POSTGRES_CREDENTIAL_ID",
+          "name": "NeonDB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "id": "c0000000-0001-4000-8000-00000000000f",
+      "name": "Aggregate",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        16,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "fieldsToSummarize": {
+          "values": [
+            {
+              "aggregation": "concatenate",
+              "field": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c0000000-0001-4000-8000-000000000010",
+      "name": "Summarize",
+      "type": "n8n-nodes-base.summarize",
+      "typeVersion": 1,
+      "position": [
+        224,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "sc1",
+              "name": "schema",
+              "type": "string",
+              "value": "={{ $('Extract from Excel').isExecuted ? $('Extract from Excel').first().json.keys().toJsonString() : $('Extract from CSV').first().json.keys().toJsonString() }}"
+            },
+            {
+              "id": "sc2",
+              "name": "data",
+              "type": "string",
+              "value": "={{ $json.concatenated_data }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c0000000-0001-4000-8000-000000000011",
+      "name": "Set Schema",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        432,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "document_metadata",
+          "cachedResultName": "document_metadata"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Set File ID').item.json.file_id }}",
+            "schema": "={{ $json.schema }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "type": "string",
+              "required": true,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "defaultMatch": true
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "type": "string",
+              "display": true,
+              "removed": true
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "type": "string",
+              "display": true,
+              "removed": true
+            },
+            {
+              "id": "mime_type",
+              "displayName": "mime_type",
+              "type": "string",
+              "display": true,
+              "removed": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "type": "dateTime",
+              "display": true,
+              "removed": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "type": "dateTime",
+              "display": true,
+              "removed": true
+            },
+            {
+              "id": "schema",
+              "displayName": "schema",
+              "type": "string",
+              "display": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "c0000000-0001-4000-8000-000000000012",
+      "name": "Update Schema for Document Metadata",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        640,
+        688
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_POSTGRES_CREDENTIAL_ID",
+          "name": "NeonDB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "tableName": "documents",
+        "options": {}
+      },
+      "id": "c0000000-0001-4000-8000-000000000013",
+      "name": "Vector Store Insert",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePGVector",
+      "typeVersion": 1.3,
+      "position": [
+        560,
+        1008
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_POSTGRES_CREDENTIAL_ID",
+          "name": "NeonDB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "REPLACE_ME_TELEGRAM_CHAT_ID",
+        "text": "=\ud83d\udce5 <b>Document Ingested</b>\n\n<b>{{ $('Set File ID').item.json.file_title }}</b>\n\ud83c\udff7\ufe0f  {{ ({'application/pdf':'PDF Document','application/vnd.google-apps.document':'Google Doc','application/vnd.google-apps.spreadsheet':'Google Sheet','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'Excel Spreadsheet','text/csv':'CSV File','text/plain':'Text File'})[$('Set File ID').item.json.file_type] || $('Set File ID').item.json.file_type }}\n\ud83d\udd22  {{ $input.all().length }} chunk(s) indexed\n\n\ud83d\udd17 <a href=\"{{ $('Set File ID').item.json.file_url }}\">Open in Google Drive</a>\n\n<i>\u2705 Ready for retrieval. Ask me anything about it in chat.</i>",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "c0000000-0001-4000-8000-000000000017",
+      "name": "Telegram Confirm Ingest",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -1456,
+        1024
+      ],
+      "executeOnce": true,
+      "webhookId": "913971c0-ff2a-4f86-bfda-f8e6ba48adae",
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_ME_TELEGRAMAPI_CREDENTIAL_ID",
+          "name": "RAG AI Agent"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "c0000000-0001-4000-8000-000000000020",
+      "name": "Check Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -1696,
+        1680
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/drive/v3/files",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "'REPLACE_ME_GOOGLE_RESOURCE_ID' in parents and trashed = true"
+            },
+            {
+              "name": "fields",
+              "value": "files(id,name,mimeType,webViewLink,trashed,trashedTime)"
+            },
+            {
+              "name": "pageSize",
+              "value": "1000"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c0000000-0001-4000-8000-000000000021",
+      "name": "Get Trashed Files via API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -1504,
+        1680
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REPLACE_ME_GOOGLEDRIVEOAUTH2API_CREDENTIAL_ID",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the response from Google Drive API\nconst response = $input.first().json;\nconst trashedFiles = response.files || [];\n\nif (trashedFiles.length === 0) {\n  return [{ message: 'No trashed files found', count: 0 }];\n}\n\n// Return each file as a separate item for processing\nreturn trashedFiles.map(file => ({\n  file_id: file.id,\n  file_name: file.name,\n  file_type: file.mimeType,\n  file_url: file.webViewLink,\n  trashed_time: file.trashedTime\n}));"
+      },
+      "id": "c0000000-0001-4000-8000-000000000022",
+      "name": "Parse Trashed Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1296,
+        1680
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f1",
+              "leftValue": "={{ $json.file_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c0000000-0001-4000-8000-000000000023",
+      "name": "Has Files to Delete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1104,
+        1680
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id FROM document_metadata WHERE id = '{{ $json.file_id }}'",
+        "options": {
+          "queryReplacement": "={{ $json.file_id }}"
+        }
+      },
+      "id": "c0000000-0001-4000-8000-000000000024",
+      "name": "Check If Exists in DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -896,
+        1680
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_POSTGRES_CREDENTIAL_ID",
+          "name": "NeonDB"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "e1",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c0000000-0001-4000-8000-000000000025",
+      "name": "Exists in DB?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -704,
+        1680
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DO $$\nBEGIN\n    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'documents') THEN\n        EXECUTE 'DELETE FROM documents WHERE metadata->>''file_id'' LIKE ''%' || $1 || '%''';\n    END IF;\nEND\n$$;",
+        "options": {
+          "queryReplacement": "={{ $('Parse Trashed Files').item.json.file_id }}"
+        }
+      },
+      "id": "c0000000-0001-4000-8000-000000000026",
+      "name": "Delete Vectors (Trashed)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -496,
+        1680
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_POSTGRES_CREDENTIAL_ID",
+          "name": "NeonDB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM document_rows\nWHERE dataset_id LIKE '%' || $1 || '%';",
+        "options": {
+          "queryReplacement": "={{ $('Parse Trashed Files').first().json.file_id }}"
+        }
+      },
+      "id": "c0000000-0001-4000-8000-000000000027",
+      "name": "Delete Rows (Trashed)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -304,
+        1680
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_POSTGRES_CREDENTIAL_ID",
+          "name": "NeonDB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM document_metadata WHERE id = '{{ $('Parse Trashed Files').first().json.file_id }}'",
+        "options": {}
+      },
+      "id": "c0000000-0001-4000-8000-000000000028",
+      "name": "Delete Metadata (Trashed)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -96,
+        1680
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_POSTGRES_CREDENTIAL_ID",
+          "name": "NeonDB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {
+          "download": false
+        }
+      },
+      "id": "c0000000-0001-4000-8000-000000000030",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1488,
+        -128
+      ],
+      "webhookId": "c0000000-0001-4000-8000-000000000030",
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_ME_TELEGRAMAPI_CREDENTIAL_ID",
+          "name": "RAG AI Agent"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message.text || $json.message.caption || '' }}",
+        "options": {
+          "systemMessage": "You are a personal assistant who answers questions from a corpus of documents stored in a Neon Postgres knowledge base. Documents are either text-based (TXT, PDFs, Google Docs) or tabular (CSV / Excel). Tabular files are also vectorized, so rag_search can surface them by semantic match.\n\nYou have four tools:\n- rag_search: semantic search over text chunks in the `documents` table. Returns the most relevant passages with file_id + file_title metadata. This is your default for any fact-based question.\n- list_documents: every file in `document_metadata`, including the `schema` column (JSON keys of row_data) for tabular files. Use it whenever you need a file_id or CSV/Excel column names.\n- get_file_contents: full concatenated text of one document by file_id. Use for summarization, main-point / overall-theme questions, or when rag_search chunks are too narrow.\n- query_document_rows: runs a SELECT against `document_rows` for precise math on tabular data. `dataset_id` = file_id (multi-sheet XLSX uses `<file_id>:<sheet_name>`); `row_data` is a jsonb column whose keys come from the `schema` in document_metadata.\n\nRouting:\n- specific fact / quote / definition                \u2192 rag_search\n- summarize / main points / overall theme           \u2192 get_file_contents (call list_documents first if you don't already have the file_id)\n- average / sum / count / max / min / top N / trend \u2192 list_documents (to read dataset_id + schema), then query_document_rows\n- compare across documents                          \u2192 list_documents first, then combine tools as needed\n\nRules:\n- ALWAYS call the appropriate tool for each new user question. Even if you answered a similar question earlier in this conversation, retrieve the data again and produce the answer fresh. Do NOT reply with \"I already provided that\" or \"would you like me to reiterate\" \u2014 just answer.\n- Memory is for coreference only (e.g. \"that file\", \"the revenue number you quoted\"). It is not a substitute for tool calls on facts.\n- Never guess a file_id or dataset_id \u2014 always take it from list_documents.\n- query_document_rows must only emit SELECT statements. Cast jsonb values explicitly, e.g. (row_data->>'revenue')::numeric.\n- If rag_search returns nothing relevant, fall back to list_documents + get_file_contents on the most likely file before giving up.\n- If you still can't find the answer, say so honestly. Never fabricate.",
+          "maxIterations": 10
+        }
+      },
+      "id": "c0000000-0001-4000-8000-000000000031",
+      "name": "RAG AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -1184,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "maxOutputTokens": 2048,
+          "temperature": 0.4
+        }
+      },
+      "id": "c0000000-0001-4000-8000-000000000032",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -1376,
+        112
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "REPLACE_ME_GOOGLEPALMAPI_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Use RAG to look up information in the knowledgebase. Returns the most relevant text chunks with their file_id and file_title metadata.",
+        "tableName": "documents",
+        "topK": 6,
+        "useReranker": true,
+        "options": {}
+      },
+      "id": "c0000000-0001-4000-8000-000000000034",
+      "name": "rag_search",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePGVector",
+      "typeVersion": 1.3,
+      "position": [
+        -1072,
+        208
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_POSTGRES_CREDENTIAL_ID",
+          "name": "NeonDB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Use this tool to fetch all available documents, including the table schema if the file is a CSV or Excel file.",
+        "operation": "select",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "document_metadata",
+          "cachedResultName": "document_metadata"
+        },
+        "returnAll": true,
+        "options": {}
+      },
+      "id": "c0000000-0001-4000-8000-000000000036",
+      "name": "list_documents",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        -800,
+        272
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_POSTGRES_CREDENTIAL_ID",
+          "name": "NeonDB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Given a file_id, fetches the full concatenated text from the document. Use this for summarization or big-picture questions.",
+        "operation": "executeQuery",
+        "query": "SELECT string_agg(text, ' ') AS document_text\nFROM documents\nWHERE metadata->>'file_id' = $1\nGROUP BY metadata->>'file_id';",
+        "options": {
+          "queryReplacement": "={{ $fromAI('file_id') }}"
+        }
+      },
+      "id": "c0000000-0001-4000-8000-000000000037",
+      "name": "get_file_contents",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        -656,
+        272
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_POSTGRES_CREDENTIAL_ID",
+          "name": "NeonDB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Run a SQL query - use this to query from the document_rows table once you know the file ID you are querying. dataset_id is the file_id (for XLSX it may be 'fileId:sheetName') and you are always filtering by row_data, a jsonb field that has all keys from the file schema given in the document_metadata table. Only emit SELECT statements.\n\nExample query:\nSELECT AVG((row_data->>'revenue')::numeric)\nFROM document_rows\nWHERE dataset_id = '1abc';\n\nExample query 2:\nSELECT row_data->>'category' AS category, SUM((row_data->>'sales')::numeric) AS total_sales\nFROM document_rows\nWHERE dataset_id = '1abc'\nGROUP BY row_data->>'category';",
+        "operation": "executeQuery",
+        "query": "{{ $fromAI('sql_query') }}",
+        "options": {}
+      },
+      "id": "c0000000-0001-4000-8000-000000000038",
+      "name": "query_document_rows",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.6,
+      "position": [
+        -496,
+        272
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_POSTGRES_CREDENTIAL_ID",
+          "name": "NeonDB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Clean the agent output for Telegram HTML mode.\n// Truncates BEFORE tag insertion so <b>/<code> can never straddle the cut,\n// and closes any stray open tags as a safety net.\nconst raw = $input.first().json.output ?? $input.first().json.text ?? '';\nlet text = String(raw);\n// Cap raw text first (leaves room for tag wrappers and HTML-entity expansion)\nif (text.length > 3500) text = text.slice(0, 3496) + '...';\n// Strip fenced code blocks (keep content)\ntext = text.replace(/```[a-zA-Z]*\\n?/g, '').replace(/```/g, '');\n// Strip markdown headings\ntext = text.replace(/^\\s*#{1,6}\\s+/gm, '');\n// Escape HTML entities BEFORE inserting our own tags\ntext = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n// Paired bold\ntext = text.replace(/\\*\\*([^\\s*][^*\\n]*?[^\\s*])\\*\\*/g, '<b>$1</b>');\ntext = text.replace(/\\*([^\\s*][^*\\n]*?[^\\s*])\\*/g, '<b>$1</b>');\n// Paired inline code\ntext = text.replace(/`([^`\\n]+)`/g, '<code>$1</code>');\n// Bullet markers at line start\ntext = text.replace(/^\\s*\\*\\s+/gm, '\u2022 ');\n// Kill any stray unpaired asterisks / backticks\ntext = text.replace(/\\*/g, '').replace(/`/g, '');\n// Safety net: close any unbalanced open tags (defensive)\nconst openStack = [];\nconst tagRe = /<(\\/?)(b|code|i|u|s|pre)>/gi;\nlet m;\nwhile ((m = tagRe.exec(text)) !== null) {\n  if (m[1] === '/') {\n    const ix = openStack.lastIndexOf(m[2].toLowerCase());\n    if (ix !== -1) openStack.splice(ix, 1);\n  } else {\n    openStack.push(m[2].toLowerCase());\n  }\n}\nwhile (openStack.length) text += '</' + openStack.pop() + '>';\nreturn [{ json: { text, chat_id: $('Telegram Trigger').first().json.message.chat.id } }];"
+      },
+      "id": "c0000000-0001-4000-8000-000000000039",
+      "name": "Format for Telegram",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "REPLACE_ME_TELEGRAM_CHAT_ID",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "c0000000-0001-4000-8000-00000000003a",
+      "name": "Telegram Send Reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -656,
+        -128
+      ],
+      "webhookId": "590040a8-5357-4637-a0b9-4aadeed868bc",
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_ME_TELEGRAMAPI_CREDENTIAL_ID",
+          "name": "RAG AI Agent"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "speech",
+        "voice": {
+          "__rl": true,
+          "mode": "id",
+          "value": "cjVigY5qzO86Huf0OWal"
+        },
+        "text": "={{ $json.text }}",
+        "additionalOptions": {
+          "model": {
+            "__rl": true,
+            "mode": "list",
+            "value": "eleven_multilingual_v2"
+          },
+          "outputFormat": "mp3_44100_64"
+        },
+        "requestOptions": {}
+      },
+      "id": "c0000000-0001-4000-8000-000000000040",
+      "name": "ElevenLabs TTS",
+      "type": "@elevenlabs/n8n-nodes-elevenlabs.elevenLabs",
+      "typeVersion": 1,
+      "position": [
+        -656,
+        -32
+      ],
+      "credentials": {
+        "elevenLabsApi": {
+          "id": "REPLACE_ME_ELEVENLABSAPI_CREDENTIAL_ID",
+          "name": "ElevenLabs account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendAudio",
+        "chatId": "REPLACE_ME_TELEGRAM_CHAT_ID",
+        "binaryData": true,
+        "additionalFields": {
+          "caption": "Audio reply"
+        }
+      },
+      "id": "c0000000-0001-4000-8000-000000000041",
+      "name": "Telegram Send Audio",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -416,
+        -32
+      ],
+      "webhookId": "29d19089-a1e7-45fe-b0a3-ec99de4327d0",
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_ME_TELEGRAMAPI_CREDENTIAL_ID",
+          "name": "RAG AI Agent"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "dimensions": 1536
+        }
+      },
+      "id": "c0000000-0001-4000-8000-000000000016",
+      "name": "Embeddings OpenAI Insert",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        464,
+        1248
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_ME_OPENAIAPI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "dimensions": 1536
+        }
+      },
+      "id": "c0000000-0001-4000-8000-000000000035",
+      "name": "Embeddings OpenAI Retrieve",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -1088,
+        320
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_ME_OPENAIAPI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "=rag_v2:{{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "contextWindowLength": 10
+      },
+      "id": "55c5d21f-14da-4156-b6a7-6c9159046e7c",
+      "name": "Postgres Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryPostgresChat",
+      "typeVersion": 1.3,
+      "position": [
+        -1248,
+        112
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_ME_POSTGRES_CREDENTIAL_ID",
+          "name": "NeonDB"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.rerankerCohere",
+      "typeVersion": 1,
+      "position": [
+        -928,
+        336
+      ],
+      "id": "fa50abe5-4e7a-4cf6-910a-b7cbd071facd",
+      "name": "Reranker Cohere",
+      "credentials": {
+        "cohereApi": {
+          "id": "REPLACE_ME_COHEREAPI_CREDENTIAL_ID",
+          "name": "Cohere account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "code": {
+          "execute": {
+            "code": "const { PromptTemplate } = require('@langchain/core/prompts');\n\nconst documentContent = $input.item.json?.data || $input.item.json?.text;\nconst maxChunkSize = 1000;\nconst minChunkSize = 400;\n\nif (!documentContent) {\n    throw new Error('No document found in input');\n}\n\nconst llm = await this.getInputConnectionData('ai_languageModel', 0);\n\nfunction cleanText(text) {\n    return text.replace(/\\s+/g, ' ').trim();\n}\n\nconst chunks = [];\nlet remainingText = cleanText(documentContent);\nlet chunkNumber = 1;\n\nif (remainingText.length <= maxChunkSize) {\n    chunks.push({\n        content: remainingText,\n        chunk: chunkNumber,\n        chunk_size: remainingText.length\n    });\n} else {\n    while (remainingText) {\n        const textToAnalyze = remainingText.substring(0, maxChunkSize);\n        \n        const promptText = `You are analyzing a document to find the best transition point to split it into meaningful sections.\n\nYour goal: Keep related content together and split where topics naturally transition.\n\nRead this text carefully and identify where one topic/section ends and another begins:\n\n${textToAnalyze}\n\nFind the best transition point that occurs BEFORE character position ${maxChunkSize}.\n\nLook for:\n- Section headings or topic changes\n- Paragraph boundaries where the subject shifts\n- Complete conclusions before new ideas start\n- Natural breaks between different aspects of the content\n\nOutput the LAST WORD that appears right before your chosen split point.\nJust the single word itself, nothing else.\nExample: If you want to split after \"The company was founded in 2022.\" then output: \"2022\"`;\n        \n        const prompt = PromptTemplate.fromTemplate(promptText);\n        const chain = prompt.pipe(llm);\n        \n        let breakPoint = maxChunkSize;\n        \n        try {\n            const response = await chain.invoke();\n            const responseText = response.content || response.text || response.toString();\n            const breakWord = responseText.trim();\n            \n            if (breakWord) {\n                // Find the last occurrence of this word in the text to analyze\n                const wordIndex = textToAnalyze.lastIndexOf(breakWord);\n                if (wordIndex !== -1) {\n                    // Split after the word (including any punctuation that follows)\n                    breakPoint = wordIndex + breakWord.length;\n                    // Move past any punctuation or single space after the word\n                    while (breakPoint < textToAnalyze.length && \n                           (textToAnalyze[breakPoint] === '.' || \n                            textToAnalyze[breakPoint] === '!' || \n                            textToAnalyze[breakPoint] === '?' || \n                            textToAnalyze[breakPoint] === ',' || \n                            textToAnalyze[breakPoint] === ';' || \n                            textToAnalyze[breakPoint] === ':' || \n                            textToAnalyze[breakPoint] === ' ')) {\n                        breakPoint++;\n                        // Stop after moving past one space\n                        if (textToAnalyze[breakPoint - 1] === ' ') break;\n                    }\n                    breakPoint = Math.min(breakPoint, maxChunkSize);\n                }\n            }\n        } catch (error) {\n            console.log('LLM failed to determine breakpoint, using max size:', error.message);\n            breakPoint = maxChunkSize;\n        }\n        \n        const chunk = remainingText.substring(0, breakPoint).trim();\n        \n        if (chunk) {\n            chunks.push({\n                content: chunk,\n                chunk: chunkNumber,\n                chunk_size: chunk.length\n            });\n            chunkNumber++;\n        }\n        \n        remainingText = remainingText.substring(breakPoint).trim();\n        \n        if (!remainingText) {\n            break;\n        }\n    }\n}\n\n// Merge chunks that are below minimum size with adjacent chunks if possible\nlet i = 0;\nwhile (i < chunks.length) {\n    if (chunks[i].chunk_size < minChunkSize) {\n        // Try to merge with next chunk first if it exists and won't exceed max\n        if (i + 1 < chunks.length && \n            chunks[i].chunk_size + chunks[i + 1].chunk_size <= maxChunkSize) {\n            // Merge current with next\n            chunks[i].content += ' ' + chunks[i + 1].content;\n            chunks[i].chunk_size = chunks[i].content.length;\n            chunks.splice(i + 1, 1);\n            // Don't increment i, check this chunk again in case it's still small\n        } \n        // Otherwise try to merge with previous chunk if it exists and won't exceed max\n        else if (i > 0 && \n                 chunks[i - 1].chunk_size + chunks[i].chunk_size <= maxChunkSize) {\n            // Merge current into previous\n            chunks[i - 1].content += ' ' + chunks[i].content;\n            chunks[i - 1].chunk_size = chunks[i - 1].content.length;\n            chunks.splice(i, 1);\n            // Don't increment i, we removed current chunk\n        } else {\n            // Can't merge without exceeding max, move on\n            i++;\n        }\n    } else {\n        i++;\n    }\n}\n\nconst returnData = chunks.map(chunk => ({\n    json: chunk\n}));\n\nreturn returnData;"
+          }
+        },
+        "inputs": {
+          "input": [
+            {
+              "type": "ai_languageModel",
+              "maxConnections": 1,
+              "required": true
+            },
+            {
+              "type": "main",
+              "required": true
+            }
+          ]
+        },
+        "outputs": {
+          "output": [
+            {
+              "type": "main"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.code",
+      "typeVersion": 1,
+      "position": [
+        96,
+        1008
+      ],
+      "id": "0609150c-f5c3-41e4-889e-53cadce4fd2d",
+      "name": "LangChain Code"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        160,
+        1184
+      ],
+      "id": "eaf31754-0ad3-4384-90b5-e8550c320e79",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_ME_OPENAIAPI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.content || $json.data || $json.text || $json.concatenated_data }}",
+        "textSplittingMode": "custom",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "file_id",
+                "value": "={{ $('Set File ID').first().json.file_id }}"
+              },
+              {
+                "name": "file_title",
+                "value": "={{ $('Set File ID').first().json.file_title }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        624,
+        1216
+      ],
+      "id": "839db4a7-1bdd-41f2-a81f-b6e8fbfee63c",
+      "name": "Default Data Loader"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        752,
+        1360
+      ],
+      "id": "7b79801b-49b7-466c-90b0-9a648c22cf63",
+      "name": "Recursive Character Text Splitter"
+    }
+  ],
+  "connections": {
+    "File Created": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "File Updated": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Telegram Confirm Ingest",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set File ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set File ID": {
+      "main": [
+        [
+          {
+            "node": "Delete Old Vector Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Old Vector Chunks": {
+      "main": [
+        [
+          {
+            "node": "Delete Old Doc Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Old Doc Rows": {
+      "main": [
+        [
+          {
+            "node": "Insert Document Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Document Metadata": {
+      "main": [
+        [
+          {
+            "node": "Download File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download File": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Extract from Excel",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract from CSV",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract PDF Text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Document Text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Document Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from Excel": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Insert Table Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from CSV": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Insert Table Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF Text": {
+      "main": [
+        [
+          {
+            "node": "LangChain Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Document Text": {
+      "main": [
+        [
+          {
+            "node": "LangChain Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Summarize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize": {
+      "main": [
+        [
+          {
+            "node": "Set Schema",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Vector Store Insert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Schema": {
+      "main": [
+        [
+          {
+            "node": "Update Schema for Document Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Table Rows": {
+      "main": [
+        []
+      ]
+    },
+    "Embeddings OpenAI Insert": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Vector Store Insert",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Every 15 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Get Trashed Files via API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Trashed Files via API": {
+      "main": [
+        [
+          {
+            "node": "Parse Trashed Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Trashed Files": {
+      "main": [
+        [
+          {
+            "node": "Has Files to Delete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Files to Delete?": {
+      "main": [
+        [
+          {
+            "node": "Check If Exists in DB",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Check If Exists in DB": {
+      "main": [
+        [
+          {
+            "node": "Exists in DB?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exists in DB?": {
+      "main": [
+        [
+          {
+            "node": "Delete Vectors (Trashed)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Delete Vectors (Trashed)": {
+      "main": [
+        [
+          {
+            "node": "Delete Rows (Trashed)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Rows (Trashed)": {
+      "main": [
+        [
+          {
+            "node": "Delete Metadata (Trashed)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "RAG AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Format for Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "RAG AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "rag_search": {
+      "ai_tool": [
+        [
+          {
+            "node": "RAG AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings OpenAI Retrieve": {
+      "ai_embedding": [
+        [
+          {
+            "node": "rag_search",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "list_documents": {
+      "ai_tool": [
+        [
+          {
+            "node": "RAG AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_file_contents": {
+      "ai_tool": [
+        [
+          {
+            "node": "RAG AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "query_document_rows": {
+      "ai_tool": [
+        [
+          {
+            "node": "RAG AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format for Telegram": {
+      "main": [
+        [
+          {
+            "node": "Telegram Send Reply",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "ElevenLabs TTS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vector Store Insert": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ElevenLabs TTS": {
+      "main": [
+        [
+          {
+            "node": "Telegram Send Audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "RAG AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reranker Cohere": {
+      "ai_reranker": [
+        [
+          {
+            "node": "rag_search",
+            "type": "ai_reranker",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LangChain Code": {
+      "main": [
+        [
+          {
+            "node": "Vector Store Insert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "LangChain Code",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Vector Store Insert",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recursive Character Text Splitter": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Default Data Loader",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true
+  },
+  "staticData": null
+}
